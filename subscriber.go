@@ -25,6 +25,7 @@ type Subscribe struct {
 	id      SubscriberID
 	topics  []string
 	handler MailBoxHandler
+	closed  bool //订阅主题和关闭时，需要判断是否已经closed. 退订时可以不用判断，因为那时的s.topics是空的
 }
 
 func (s *Subscribe) Id() SubscriberID {
@@ -54,6 +55,9 @@ func (s *Subscribe) Topics() []string {
 
 func (s *Subscribe) Subscribe(topic string) error {
 	s.Lock()
+	if s.isClosed() {
+		return fmt.Errorf("subscriber:%v already closed", s.id)
+	}
 
 	exist := false
 	for _, t := range s.topics {
@@ -73,9 +77,15 @@ func (s *Subscribe) Subscribe(topic string) error {
 	return fmt.Errorf("already Subscribed topic:%s", topic)
 }
 
+// 退订的时候，锁的颗粒度大一点，它包括了s.sm.RemoveSubscriber(s, topic)
 func (s *Subscribe) UnSubscribe(topic string) {
 	s.Lock()
+	defer s.Unlock()
+	s.unSubscribe(topic)
+}
 
+// 小写开头，不加锁
+func (s *Subscribe) unSubscribe(topic string) {
 	removeIndex := 0
 	exist := false
 	for i, t := range s.topics {
@@ -89,17 +99,27 @@ func (s *Subscribe) UnSubscribe(topic string) {
 		s.topics = append(s.topics[0:removeIndex], s.topics[removeIndex+1:]...)
 	}
 
-	s.Unlock()
-
 	if exist {
 		s.sm.RemoveSubscriber(s, topic)
 	}
+}
+
+func (s *Subscribe) isClosed() bool {
+	return s.closed
 }
 
 func (s *Subscribe) Close() error {
 	//todo: 这里不严谨，s.topics 没有锁同步机制，s.topics 不一定是当前最新的,
 	//所以目前上层业务层自己保证Close()后没有订阅或退订的操作。一般是连接确定断开后才调用Subscribe.Close(),所以一般没有问题。
 	//fmt.Printf("close, %v unSubscribe topics:%v\n", s.id, s.topics)
+
+	//2024-8-24 增加锁
+	s.Lock()
+	defer s.Unlock()
+	if s.isClosed() {
+		return fmt.Errorf("subscriber:%v already closed", s.id)
+	}
+	s.closed = true
 
 	//fixbug:
 	//需要把s.topics 拷贝出来，不能直接要用for _, topic := range s.topics {...},
@@ -111,7 +131,12 @@ func (s *Subscribe) Close() error {
 	//for _, topic := range s.topics {
 	for _, topic := range topics {
 		//fmt.Printf("unSubscribe topic:%v\n", topic)
-		s.UnSubscribe(topic)
+		s.unSubscribe(topic)
+	}
+
+	//check
+	if len(s.topics) != 0 {
+		panic(fmt.Sprintf("subscriber:%v closed, but still have topics", s.id))
 	}
 	return nil
 }
