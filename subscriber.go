@@ -77,7 +77,10 @@ func (s *Subscribe) Subscribe(topic string) error {
 	return fmt.Errorf("already Subscribed topic:%s", topic)
 }
 
-// 退订的时候，锁的颗粒度大一点，它包括了s.sm.RemoveSubscriber(s, topic)
+// UnSubscribe退订的时候，锁的颗粒度大一点，它包括了s.sm.RemoveSubscriber(s, topic)
+// 但是没啥影响, 因为如果sm.RemoveSubscriber()hold锁的时间比较长,
+// subscriber订阅时也比较长, 不会因为UnSubscribe hold锁的时间变短了而变短, 因为订阅需要调用sm.AddSubscriber()
+// 本身订阅和退订的操作不是很频繁的事，对性能不敏感, 不是处理消息。
 func (s *Subscribe) UnSubscribe(topic string) {
 	s.Lock()
 	defer s.Unlock()
