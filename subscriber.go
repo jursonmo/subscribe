@@ -74,9 +74,10 @@ func (s *Subscribe) Subscribe(topic string) error {
 	if !exist {
 		return s.sm.AddSubscriber(topic, s)
 	}
-	return fmt.Errorf("already Subscribed topic:%s", topic)
+	return fmt.Errorf("subscriber:%v already Subscribed topic:%s", s.id, topic)
 }
 
+// 锁流程: 退订的锁---->SubscriberMgr{} 锁---> Subscribers{} 锁，注意不要死锁。
 // UnSubscribe退订的时候，锁的颗粒度大一点，它包括了s.sm.RemoveSubscriber(s, topic)
 // 但是没啥影响, 因为如果sm.RemoveSubscriber()hold锁的时间比较长,
 // subscriber订阅时也比较长, 不会因为UnSubscribe hold锁的时间变短了而变短, 因为订阅需要调用sm.AddSubscriber()
