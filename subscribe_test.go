@@ -186,6 +186,10 @@ func TestSubscriberClose(t *testing.T) {
 	if len(sub1.Topics()) != 1 {
 		t.Fatalf("after Subscribe, expect len(sub1.Topics()=1, but got %d", len(sub1.Topics()))
 	}
+	//测试获取订阅topic的数量
+	if sm.TopicNum() != 1 {
+		t.Fatalf("expect sm.TopicNum():1, but got %d", sm.TopicNum())
+	}
 	//测试根据topic 获取 订阅者数量
 	if n := len(sm.GetSubscribers(topic)); n != 1 {
 		t.Fatalf("expect len(sm.GetSubscribers(topic)):1, but got %d", n)
@@ -196,6 +200,12 @@ func TestSubscriberClose(t *testing.T) {
 	if len(sub1.Topics()) != 0 {
 		t.Fatalf("after close, len(sub3.Topics()):%d should be 0", len(sub1.Topics()))
 	}
+
+	//测试获取订阅topic的数量
+	if sm.TopicNum() != 0 {
+		t.Fatalf("expect sm.TopicNum():0, but got %d", sm.TopicNum())
+	}
+
 	//测试根据topic 获取订阅者数量
 	if n := len(sm.GetSubscribers(topic)); n != 0 {
 		t.Fatalf("expect len(sm.GetSubscribers(topic)):0, but got %d", n)

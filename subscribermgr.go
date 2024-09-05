@@ -247,3 +247,9 @@ func (sm *SubscriberMgr) GetSubscribers(topic string) []Subscriber {
 
 	return subscribers.GetAllSubscriber()
 }
+
+func (sm *SubscriberMgr) TopicNum() int {
+	sm.Lock()
+	defer sm.Unlock()
+	return len(sm.subscribers)
+}
