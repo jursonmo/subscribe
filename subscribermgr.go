@@ -41,13 +41,13 @@ func (ss *Subscribers) TraversalDo(exclude Subscriber, do func(s Subscriber)) {
 	}
 }
 
-func (ss *Subscribers) getAllSubscriber() []Subscriber {
+func (ss *Subscribers) GetAllSubscriber() []Subscriber {
 	ss.RLock()
 	defer ss.RUnlock()
 	return ss.subSlice
 }
 
-func (ss *Subscribers) delSubscriber(s Subscriber) {
+func (ss *Subscribers) DelSubscriber(s Subscriber) {
 	//fmt.Printf("delelte subscriber:%v\n", s.Id())
 	if s == nil {
 		return
@@ -86,7 +86,7 @@ func (ss *Subscribers) delSubscriber(s Subscriber) {
 	}
 }
 
-func (ss *Subscribers) addSubscriber(s Subscriber) {
+func (ss *Subscribers) AddSubscriber(s Subscriber) {
 	ss.Lock()
 	defer ss.Unlock()
 	ss.subMap[s.Id()] = s
@@ -137,11 +137,11 @@ func (sm *SubscriberMgr) AddSubscriber(topic string, s Subscriber) error {
 	subscribers, ok := sm.subscribers[topic]
 	if !ok {
 		subscribers = &Subscribers{subMap: make(map[SubscriberID]Subscriber)}
-		subscribers.addSubscriber(s)
+		subscribers.AddSubscriber(s)
 		sm.subscribers[topic] = subscribers
 		return nil
 	}
-	subscribers.addSubscriber(s)
+	subscribers.AddSubscriber(s)
 	return nil
 }
 
@@ -154,7 +154,7 @@ func (sm *SubscriberMgr) RemoveSubscriberByID(id SubscriberID, topic string) {
 	}
 
 	sub := subscribers.GetSubscriber(id)
-	subscribers.delSubscriber(sub)
+	subscribers.DelSubscriber(sub)
 
 	//there is no subscribers on this topic?
 	if len(subscribers.subMap) == 0 {
@@ -176,7 +176,7 @@ func (sm *SubscriberMgr) removeSubscriber(sub Subscriber, topic string) {
 		return
 	}
 
-	subscribers.delSubscriber(sub)
+	subscribers.DelSubscriber(sub)
 
 	//there is no subscribers on this topic?
 	if len(subscribers.subMap) == 0 {
@@ -245,5 +245,5 @@ func (sm *SubscriberMgr) GetSubscribers(topic string) []Subscriber {
 	}
 	sm.Unlock()
 
-	return subscribers.getAllSubscriber()
+	return subscribers.GetAllSubscriber()
 }
