@@ -173,6 +173,34 @@ func TestBaseFunc(t *testing.T) {
 	}
 
 }
+func TestSubscriberClose(t *testing.T) {
+	sm := NewSubscriberMgr()
+	subID1 := SubscriberID("subID-1")
+	topic := "topic-test"
+	sub1 := sm.NewSubscriber(subID1, func(topic string, d []byte) error { return nil })
+
+	err := sub1.Subscribe(topic)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(sub1.Topics()) != 1 {
+		t.Fatalf("after Subscribe, expect len(sub1.Topics()=1, but got %d", len(sub1.Topics()))
+	}
+	//测试根据topic 获取 订阅者数量
+	if n := len(sm.GetSubscribers(topic)); n != 1 {
+		t.Fatalf("expect len(sm.GetSubscribers(topic)):1, but got %d", n)
+	}
+
+	sub1.Close()
+
+	if len(sub1.Topics()) != 0 {
+		t.Fatalf("after close, len(sub3.Topics()):%d should be 0", len(sub1.Topics()))
+	}
+	//测试根据topic 获取订阅者数量
+	if n := len(sm.GetSubscribers(topic)); n != 0 {
+		t.Fatalf("expect len(sm.GetSubscribers(topic)):0, but got %d", n)
+	}
+}
 
 func TestAddSubscribeCheck(t *testing.T) {
 	subID1 := SubscriberID("subID-1")
