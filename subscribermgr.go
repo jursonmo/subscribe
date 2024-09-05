@@ -22,6 +22,25 @@ type Subscribers struct {
 	subSlice []Subscriber
 }
 
+func (ss *Subscribers) GetSubscriber(id SubscriberID) Subscriber {
+	ss.RLock()
+	defer ss.RUnlock()
+	return ss.subMap[id]
+}
+
+// 在锁保护下, 遍历所有的subscriber, 不包括exclude的subscriber
+// todo: 通过sharding 把锁的颗粒度改小, 尽量减少锁的竞争
+func (ss *Subscribers) TraversalDo(exclude Subscriber, do func(s Subscriber)) {
+	ss.RLock()
+	defer ss.RUnlock()
+	for _, s := range ss.subMap {
+		if s == exclude {
+			continue
+		}
+		do(s)
+	}
+}
+
 func (ss *Subscribers) getAllSubscriber() []Subscriber {
 	ss.RLock()
 	defer ss.RUnlock()
@@ -30,6 +49,9 @@ func (ss *Subscribers) getAllSubscriber() []Subscriber {
 
 func (ss *Subscribers) delSubscriber(s Subscriber) {
 	//fmt.Printf("delelte subscriber:%v\n", s.Id())
+	if s == nil {
+		return
+	}
 	ss.Lock()
 	defer ss.Unlock()
 
@@ -123,10 +145,32 @@ func (sm *SubscriberMgr) AddSubscriber(topic string, s Subscriber) error {
 	return nil
 }
 
+func (sm *SubscriberMgr) RemoveSubscriberByID(id SubscriberID, topic string) {
+	sm.Lock()
+	defer sm.Unlock()
+	subscribers, ok := sm.subscribers[topic]
+	if !ok {
+		return
+	}
+
+	sub := subscribers.GetSubscriber(id)
+	subscribers.delSubscriber(sub)
+
+	//there is no subscribers on this topic?
+	if len(subscribers.subMap) == 0 {
+		delete(sm.subscribers, topic)
+	}
+}
+
+// there is no subscribers on this topic?
 func (sm *SubscriberMgr) RemoveSubscriber(sub Subscriber, topic string) {
 	//todo: 把锁的颗粒度改小点
 	sm.Lock()
 	defer sm.Unlock()
+	sm.removeSubscriber(sub, topic)
+}
+
+func (sm *SubscriberMgr) removeSubscriber(sub Subscriber, topic string) {
 	subscribers, ok := sm.subscribers[topic]
 	if !ok {
 		return
@@ -140,6 +184,22 @@ func (sm *SubscriberMgr) RemoveSubscriber(sub Subscriber, topic string) {
 	}
 }
 
+func (sm *SubscriberMgr) PublishFromSubID(from SubscriberID, topic string, data []byte) (int, error) {
+	if from == "" {
+		return sm.Publish(nil, topic, data)
+	}
+	sm.Lock()
+	subscribers, ok := sm.subscribers[topic]
+	if !ok {
+		sm.Unlock()
+		return 0, fmt.Errorf("no topic:%s", topic)
+	}
+	sm.Unlock()
+
+	return sm.Publish(subscribers.GetSubscriber(from), topic, data)
+}
+
+// from可以为nil,即所有的订阅者都会收到，from 不为空，除from自己收不到，其他订阅者都能收到
 // 返回发送给订阅者的数量
 func (sm *SubscriberMgr) Publish(from Subscriber, topic string, data []byte) (int, error) {
 	// 订阅者也可以发布消息的话, 这里需要检查from是否有权限发布这个topic的消息，同时也可以检查消息内容是否合规之类的
@@ -157,15 +217,22 @@ func (sm *SubscriberMgr) Publish(from Subscriber, topic string, data []byte) (in
 	}
 	sm.Unlock()
 
-	topicSubscribers := subscribers.getAllSubscriber()
 	n := 0
-	for _, s := range topicSubscribers {
-		if s == from {
-			continue
-		}
+	// //topicSubscribers 可能会有并发问题, 可能会被修改，必须加锁，但是加锁影响性能，可以sharding 来减少锁的影响。
+	// topicSubscribers := subscribers.getAllSubscriber()
+	// for _, s := range topicSubscribers {
+	// 	if s == from {
+	// 		continue
+	// 	}
+	// 	n++
+	// 	s.MailBoxMsg(topic, data)
+	// }
+
+	// 加锁遍历给所有订阅者发送消息, 先保证正确性
+	subscribers.TraversalDo(from, func(s Subscriber) {
 		n++
 		s.MailBoxMsg(topic, data)
-	}
+	})
 	return n, nil
 }
 
