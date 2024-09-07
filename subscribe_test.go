@@ -13,7 +13,10 @@ import (
 // go tool pprof out.profile
 // 测试时间默认是1秒，也就是1秒的时间。如果想让测试运行的时间更长，可以通过 -benchtime= 指定
 // go test -bench="BenchmarkSubscribe" -benchmem -memprofile="out.profile" -benchtime=3s
-
+// -benchtime 的值除了是时间外，还可以是具体的次数。例如，执行 30 次可以用 -benchtime=30x：
+// BenchmarkFib-8 中的 -8 即 GOMAXPROCS，默认等于 CPU 核数。
+// 可以通过 -cpu 参数改变 GOMAXPROCS，-cpu 支持传入一个列表作为参数，例如：
+// go test -bench="." -cpu=2,4
 func sliceContains(ss []string, s string) bool {
 	for _, v := range ss {
 		if v == s {
