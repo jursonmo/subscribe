@@ -7,6 +7,13 @@ import (
 	"time"
 )
 
+// go test -v -race
+// go test -bench="." -benchmem
+// go test -bench="BenchmarkSubscribe" -benchmem -memprofile="out.profile"
+// go tool pprof out.profile
+// 测试时间默认是1秒，也就是1秒的时间。如果想让测试运行的时间更长，可以通过 -benchtime= 指定
+// go test -bench="BenchmarkSubscribe" -benchmem -memprofile="out.profile" -benchtime=3s
+
 func sliceContains(ss []string, s string) bool {
 	for _, v := range ss {
 		if v == s {
@@ -173,6 +180,22 @@ func TestBaseFunc(t *testing.T) {
 	}
 
 }
+
+func TestRepeatSubscribe(t *testing.T) {
+	sm := NewSubscriberMgr()
+	subID1 := SubscriberID("subID-1")
+	sub1 := sm.NewSubscriber(subID1, func(topic string, d []byte) error { return nil })
+
+	err := sub1.Subscribe(Topic1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = sub1.Subscribe(Topic1)
+	if err == nil {
+		t.Fatalf("expect err!= nil, but got nil")
+	}
+}
+
 func TestSubscriberClose(t *testing.T) {
 	sm := NewSubscriberMgr()
 	subID1 := SubscriberID("subID-1")
@@ -298,3 +321,38 @@ func TestPublishCheck(t *testing.T) {
 		t.Fatalf("sub2ReceiveMsg:%s should be same as  msg:%s ", sub2ReceiveMsg, msg)
 	}
 }
+
+func BenchmarkSubscribe(b *testing.B) {
+	sm := NewSubscriberMgr()
+	subID1 := SubscriberID("subID-1")
+	sub1 := sm.NewSubscriber(subID1, func(topic string, d []byte) error { return nil })
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		err := sub1.Subscribe("topic-test")
+		if err != nil {
+			b.Fatal(err)
+		}
+		sub1.UnSubscribe("topic-test")
+	}
+	b.StopTimer()
+
+	if sm.TopicNum() != 0 {
+		b.Fatalf("expect sm.TopicNum():0, but got %d", sm.TopicNum())
+	}
+
+	if len(sub1.Topics()) != 0 {
+		b.Fatalf("expect len(sub1.Topics()):0, but got %d", len(sub1.Topics()))
+	}
+
+}
+
+/*
+go test -bench="." -benchmem
+goos: darwin
+goarch: arm64
+pkg: github.com/jursonmo/subscribe
+BenchmarkSubscribe-8   	 4825744	       223.4 ns/op	     416 B/op	       4 allocs/op
+PASS
+ok  	github.com/jursonmo/subscribe	1.976s
+*/
