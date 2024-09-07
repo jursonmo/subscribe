@@ -185,9 +185,10 @@ func TestBaseFunc(t *testing.T) {
 }
 
 func TestRepeatSubscribe(t *testing.T) {
-	sm := NewSubscriberMgr()
 	subID1 := SubscriberID("subID-1")
-	sub1 := sm.NewSubscriber(subID1, func(topic string, d []byte) error { return nil })
+	//sm := NewSubscriberMgr()
+	//sub1 := sm.NewSubscriber(subID1, func(topic string, d []byte) error { return nil })
+	sub1 := NewSubscriber(subID1, func(topic string, d []byte) error { return nil })
 
 	err := sub1.Subscribe(Topic1)
 	if err != nil {

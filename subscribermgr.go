@@ -22,6 +22,16 @@ type Subscribers struct {
 	subSlice []Subscriber
 }
 
+var defaultSubscriberMgr *SubscriberMgr
+
+func init() {
+	defaultSubscriberMgr = NewSubscriberMgr()
+}
+
+func NewSubscriber(id SubscriberID, h MailBoxHandler) Subscriber {
+	return defaultSubscriberMgr.NewSubscriber(id, h)
+}
+
 func (ss *Subscribers) GetSubscriber(id SubscriberID) Subscriber {
 	ss.RLock()
 	defer ss.RUnlock()
