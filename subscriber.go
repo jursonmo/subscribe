@@ -125,17 +125,18 @@ func (s *Subscribe) Close() error {
 	}
 	s.closed = true
 
-	//fixbug:
-	//需要把s.topics 拷贝出来，不能直接要用for _, topic := range s.topics {...},
-	//因为s.UnSubscribe(topic) 会修改s.topic 底层的数据
-
-	topics := make([]string, len(s.topics))
-	copy(topics, s.topics)
-
-	//for _, topic := range s.topics {
-	for _, topic := range topics {
-		//fmt.Printf("unSubscribe topic:%v\n", topic)
-		s.unSubscribe(topic)
+	if len(s.topics) == 1 {
+		//如果只有一个topic, 直接退订，避免拷贝。大多数也是这种情况
+		s.unSubscribe(s.topics[0])
+	} else {
+		//fixbug:
+		//需要把s.topics 拷贝出来，不能直接要用for _, topic := range s.topics {...},
+		//因为s.UnSubscribe(topic) 会修改s.topic 底层的数据
+		topics := make([]string, len(s.topics))
+		copy(topics, s.topics)
+		for _, topic := range topics {
+			s.unSubscribe(topic)
+		}
 	}
 
 	//check
