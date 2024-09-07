@@ -5,18 +5,24 @@ first, it is copy from https://github.com/jursonmo/subpub/tree/master/subscribe,
 
 ### example:
 ```go
+package main
+
+import (
+    "github.com/jursonmo/subscribe"
+)
+
 func main() {
 	topic := "topic-test"
 
-	subID1 := SubscriberID("subID-1")
-	sub1 := NewSubscriber(subID1, func(topic string, d []byte) error {
+	subID1 := subscribe.SubscriberID("subID-1")
+	sub1 := subscribe.NewSubscriber(subID1, func(topic string, d []byte) error {
 		// todo: handle msg from topic
 		fmt.Printf("sub1 receive topic:%s, msg:%s\n", topic, string(d))
 		return nil
 	})
 
-	subID2 := SubscriberID("subID-2")
-	sub2 := NewSubscriber(subID2, func(topic string, d []byte) error {
+	subID2 := subscribe.SubscriberID("subID-2")
+	sub2 := subscribe.NewSubscriber(subID2, func(topic string, d []byte) error {
 		// todo: handle msg from topic
 		fmt.Printf("sub2 receive topic:%s, msg:%s\n", topic, string(d))
 		return nil
