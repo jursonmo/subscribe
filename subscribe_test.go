@@ -16,7 +16,7 @@ import (
 // -benchtime 的值除了是时间外，还可以是具体的次数。例如，执行 30 次可以用 -benchtime=30x：
 // BenchmarkFib-8 中的 -8 即 GOMAXPROCS，默认等于 CPU 核数。
 // 可以通过 -cpu 参数改变 GOMAXPROCS，-cpu 支持传入一个列表作为参数，例如：
-// go test -bench="." -cpu=2,4
+// go test -bench="." -cpu=2,4, 意思分别用2个核执行测试，用 4 个核执行测试。并不是用第二个、第四个核执行测试
 func sliceContains(ss []string, s string) bool {
 	for _, v := range ss {
 		if v == s {
