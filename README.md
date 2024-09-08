@@ -50,5 +50,8 @@ func main() {
 
 	sub1.Unsubscribe(topic) //sub1 will not receive msg from topic-test
     sub2.Unsubscribe(topic) //sub2 will not receive msg from topic-test
+
+    sub1.Close() //unsubscribe all topic
+    sub2.Close() //unsubscribe all topic
 }
 ```
