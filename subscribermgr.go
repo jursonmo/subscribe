@@ -5,11 +5,24 @@ import (
 	"sync"
 )
 
+const (
+	TopicAdd = "add"
+	TopicDel = "del"
+)
+
+type WatchTopicInfo struct {
+	Op    string
+	Topic string
+}
+
 type SubscriberMgr struct {
 	sync.RWMutex
 	subscribers     map[string]*Subscribers //key: topic,
 	subscriberCheck func(from Subscriber, topic string) error
 	publishCheck    func(from Subscriber, topic string, data []byte) error
+
+	watchMu     sync.RWMutex
+	watchTopics map[string]chan WatchTopicInfo //key: watchId, value: struct{}
 }
 
 type subscriberCheckHandler func(from Subscriber, topic string) error
@@ -123,7 +136,7 @@ func WithPublishCheck(h publishCheckHandler) SubscriberMgrOpt {
 }
 
 func NewSubscriberMgr(opts ...SubscriberMgrOpt) *SubscriberMgr {
-	sm := &SubscriberMgr{subscribers: make(map[string]*Subscribers)}
+	sm := &SubscriberMgr{subscribers: make(map[string]*Subscribers), watchTopics: make(map[string]chan WatchTopicInfo)}
 	for _, opt := range opts {
 		opt(sm)
 	}
@@ -149,6 +162,7 @@ func (sm *SubscriberMgr) AddSubscriber(topic string, s Subscriber) error {
 		subscribers = &Subscribers{subMap: make(map[SubscriberID]Subscriber)}
 		subscribers.AddSubscriber(s)
 		sm.subscribers[topic] = subscribers
+		sm.NotifyTopicsWatcher(TopicAdd, topic)
 		return nil
 	}
 	subscribers.AddSubscriber(s)
@@ -191,6 +205,7 @@ func (sm *SubscriberMgr) removeSubscriber(sub Subscriber, topic string) {
 	//there is no subscribers on this topic?
 	if len(subscribers.subMap) == 0 {
 		delete(sm.subscribers, topic)
+		sm.NotifyTopicsWatcher(TopicDel, topic)
 	}
 }
 
@@ -262,4 +277,49 @@ func (sm *SubscriberMgr) TopicNum() int {
 	sm.Lock()
 	defer sm.Unlock()
 	return len(sm.subscribers)
+}
+
+func (sm *SubscriberMgr) Topics() []string {
+	sm.Lock()
+	defer sm.Unlock()
+	topics := make([]string, 0, len(sm.subscribers))
+	for topic := range sm.subscribers {
+		topics = append(topics, topic)
+	}
+	return topics
+}
+
+func (sm *SubscriberMgr) NewTopicsWatcher(watchId string) (chan WatchTopicInfo, error) {
+	sm.watchMu.Lock()
+	defer sm.watchMu.Unlock()
+
+	_, ok := sm.watchTopics[watchId]
+	if ok {
+		return nil, fmt.Errorf("watchId:%s already exists", watchId)
+	}
+
+	ch := make(chan WatchTopicInfo, 128)
+	sm.watchTopics[watchId] = ch
+	return ch, nil
+}
+
+func (sm *SubscriberMgr) DelTopicsWatcher(watchId string) {
+	sm.watchMu.Lock()
+	defer sm.watchMu.Unlock()
+	if ch, ok := sm.watchTopics[watchId]; ok {
+		delete(sm.watchTopics, watchId)
+		close(ch)
+	}
+}
+
+func (sm *SubscriberMgr) NotifyTopicsWatcher(op string, topic string) {
+	sm.watchMu.RLock()
+	defer sm.watchMu.RUnlock()
+	info := WatchTopicInfo{Op: op, Topic: topic}
+	for _, ch := range sm.watchTopics {
+		select {
+		case ch <- info:
+		default:
+		}
+	}
 }

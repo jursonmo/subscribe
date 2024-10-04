@@ -326,6 +326,81 @@ func TestPublishCheck(t *testing.T) {
 	}
 }
 
+func TestTopicsWatcher(t *testing.T) {
+	topic := "topic-test"
+
+	subID1 := SubscriberID("subID-1")
+	subID2 := SubscriberID("subID-2")
+
+	sm := NewSubscriberMgr()
+	ch, err := sm.NewTopicsWatcher("watcher-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = sm.NewTopicsWatcher("watcher-1")
+	if err == nil {
+		t.Fatal("watcher-1 have exist, expect err != nil, but got nil")
+	}
+
+	sub1 := sm.NewSubscriber(subID1, func(topic string, d []byte) error { return nil })
+	sub2 := sm.NewSubscriber(subID2, func(topic string, d []byte) error { return nil })
+
+	err = sub1.Subscribe(topic)
+	if err != nil {
+		t.Fatal(err)
+	}
+	//第一次订阅topic, 应该收到TopicAdd事件
+	select {
+	case <-time.After(time.Millisecond * 10):
+		t.Fatal("error: timeout for TopicAdd")
+	case info := <-ch:
+		if info.Op != TopicAdd || info.Topic != topic {
+			t.Fatalf("info.Op:%s, info.Topic:%s expect op:TopicAdd, topic:%s", info.Op, info.Topic, topic)
+		}
+		break
+	}
+
+	err = sub2.Subscribe(topic)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	//第二次订阅topic, topic 已经存在, 应该收到不到TopicAdd事件
+	time.Sleep(time.Millisecond * 50)
+	if len(ch) != 0 {
+		t.Fatalf("expect len(ch):0, but got %d", len(ch))
+	}
+
+	sub1.UnSubscribe(topic) //sub1 退订topic, 应该收到不到任何事件，因为sub2 还在订阅topic
+	time.Sleep(time.Millisecond * 50)
+	if len(ch) != 0 {
+		t.Fatalf("expect len(ch):0, but got %d", len(ch))
+	}
+
+	sub2.UnSubscribe(topic)
+	//sub2 退订topic, 应该收到TopicDel事件, 因为sub2 是最后一个订阅topic的订阅者
+	select {
+	case <-time.After(time.Millisecond * 10):
+		t.Fatal("error: timeout for TopicDel")
+	case info := <-ch:
+		if info.Op != TopicDel || info.Topic != topic {
+			t.Fatalf("info.Op:%s, info.Topic:%s expect op:TopicDel, topic:%s", info.Op, info.Topic, topic)
+		}
+		break
+	}
+
+	//所有订阅者都退订了topic, topicNum 应该为0
+	if sm.TopicNum() != 0 {
+		t.Fatalf("expect sm.TopicNum():0, but got %d", sm.TopicNum())
+	}
+
+	sm.DelTopicsWatcher("watcher-1")
+	_, isOpen := <-ch
+	if isOpen {
+		t.Fatalf("expect ch is closed, but result is open")
+	}
+}
+
 func BenchmarkSubscribe(b *testing.B) {
 	sm := NewSubscriberMgr()
 	subID1 := SubscriberID("subID-1")
