@@ -333,13 +333,13 @@ func TestTopicsWatcher(t *testing.T) {
 	subID2 := SubscriberID("subID-2")
 
 	sm := NewSubscriberMgr()
-	ch, err := sm.NewTopicsWatcher("watcher-1")
+	watcher, err := sm.NewTopicsWatcher("watcher-1")
 	if err != nil {
 		t.Fatal(err)
 	}
 	_, err = sm.NewTopicsWatcher("watcher-1")
 	if err == nil {
-		t.Fatal("watcher-1 have exist, expect err != nil, but got nil")
+		t.Fatal("watcher-1 have exist, repeat create watcher-1, expect err != nil, but got nil")
 	}
 
 	sub1 := sm.NewSubscriber(subID1, func(topic string, d []byte) error { return nil })
@@ -353,9 +353,9 @@ func TestTopicsWatcher(t *testing.T) {
 	select {
 	case <-time.After(time.Millisecond * 10):
 		t.Fatal("error: timeout for TopicAdd")
-	case info := <-ch:
-		if info.Op != TopicAdd || info.Topic != topic {
-			t.Fatalf("info.Op:%s, info.Topic:%s expect op:TopicAdd, topic:%s", info.Op, info.Topic, topic)
+	case event := <-watcher.Event():
+		if event.Op != TopicAdd || event.Topic != topic {
+			t.Fatalf("event.Op:%s, event.Topic:%s expect op:TopicAdd, topic:%s", event.Op, event.Topic, topic)
 		}
 		break
 	}
@@ -367,14 +367,14 @@ func TestTopicsWatcher(t *testing.T) {
 
 	//第二次订阅topic, topic 已经存在, 应该收到不到TopicAdd事件
 	time.Sleep(time.Millisecond * 50)
-	if len(ch) != 0 {
-		t.Fatalf("expect len(ch):0, but got %d", len(ch))
+	if len(watcher.Event()) != 0 {
+		t.Fatalf("expect len(ch):0, but got %d", len(watcher.Event()))
 	}
 
 	sub1.UnSubscribe(topic) //sub1 退订topic, 应该收到不到任何事件，因为sub2 还在订阅topic
 	time.Sleep(time.Millisecond * 50)
-	if len(ch) != 0 {
-		t.Fatalf("expect len(ch):0, but got %d", len(ch))
+	if len(watcher.Event()) != 0 {
+		t.Fatalf("expect len(ch):0, but got %d", len(watcher.Event()))
 	}
 
 	sub2.UnSubscribe(topic)
@@ -382,9 +382,9 @@ func TestTopicsWatcher(t *testing.T) {
 	select {
 	case <-time.After(time.Millisecond * 10):
 		t.Fatal("error: timeout for TopicDel")
-	case info := <-ch:
-		if info.Op != TopicDel || info.Topic != topic {
-			t.Fatalf("info.Op:%s, info.Topic:%s expect op:TopicDel, topic:%s", info.Op, info.Topic, topic)
+	case event := <-watcher.Event():
+		if event.Op != TopicDel || event.Topic != topic {
+			t.Fatalf("event.Op:%s, event.Topic:%s expect op:TopicDel, topic:%s", event.Op, event.Topic, topic)
 		}
 		break
 	}
@@ -394,10 +394,11 @@ func TestTopicsWatcher(t *testing.T) {
 		t.Fatalf("expect sm.TopicNum():0, but got %d", sm.TopicNum())
 	}
 
+	//删除watcher后，watcher的Event()应该是关闭的
 	sm.DelTopicsWatcher("watcher-1")
-	_, isOpen := <-ch
+	_, isOpen := <-watcher.Event()
 	if isOpen {
-		t.Fatalf("expect ch is closed, but result is open")
+		t.Fatalf("expect watcher event channel is closed, but result is open")
 	}
 }
 
