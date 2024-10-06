@@ -13,6 +13,7 @@ const (
 type TopicWatcher struct {
 	name  string
 	event chan WatchTopicEvent
+	sm    *SubscriberMgr
 }
 
 type WatchTopicEvent struct {
@@ -302,6 +303,10 @@ func (sm *SubscriberMgr) Topics() []string {
 	return topics
 }
 
+func (watcher *TopicWatcher) Stop() error {
+	return watcher.sm.DelTopicsWatcher(watcher.name)
+}
+
 func (sm *SubscriberMgr) NewTopicsWatcher(watchId string) (*TopicWatcher, error) {
 	sm.watchMu.Lock()
 	defer sm.watchMu.Unlock()
@@ -311,18 +316,20 @@ func (sm *SubscriberMgr) NewTopicsWatcher(watchId string) (*TopicWatcher, error)
 		return nil, fmt.Errorf("watchId:%s already exists", watchId)
 	}
 
-	watcher := &TopicWatcher{name: watchId, event: make(chan WatchTopicEvent, 128)}
+	watcher := &TopicWatcher{name: watchId, event: make(chan WatchTopicEvent, 128), sm: sm}
 	sm.topicWatchers[watchId] = watcher
 	return watcher, nil
 }
 
-func (sm *SubscriberMgr) DelTopicsWatcher(watchId string) {
+func (sm *SubscriberMgr) DelTopicsWatcher(watchId string) error {
 	sm.watchMu.Lock()
 	defer sm.watchMu.Unlock()
 	if watcher, ok := sm.topicWatchers[watchId]; ok {
 		delete(sm.topicWatchers, watchId)
 		close(watcher.event)
+		return nil
 	}
+	return fmt.Errorf("watchId:%s not found", watchId)
 }
 
 func (sm *SubscriberMgr) NotifyTopicsWatcher(op string, topic string) {

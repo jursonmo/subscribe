@@ -326,6 +326,28 @@ func TestPublishCheck(t *testing.T) {
 	}
 }
 
+// marsCode 生成的代码
+func TestNewTopicsWatcher(t *testing.T) {
+	sm := NewSubscriberMgr()
+
+	// 测试正常创建新的 TopicWatcher
+	watcher, err := sm.NewTopicsWatcher("testWatchId")
+	if err != nil {
+		t.Errorf("Expected no error, got: %v", err)
+	}
+	if watcher == nil {
+		t.Errorf("Expected watcher to be not nil")
+	}
+
+	// 测试 watchId 已存在的情况
+	_, err = sm.NewTopicsWatcher("testWatchId")
+	if err == nil {
+		t.Errorf("Expected error for existing watchId, got nil")
+	} else if err.Error() != "watchId:testWatchId already exists" {
+		t.Errorf("Expected specific error message, got: %v", err)
+	}
+}
+
 func TestTopicsWatcher(t *testing.T) {
 	topic := "topic-test"
 
@@ -399,6 +421,39 @@ func TestTopicsWatcher(t *testing.T) {
 	_, isOpen := <-watcher.Event()
 	if isOpen {
 		t.Fatalf("expect watcher event channel is closed, but result is open")
+	}
+}
+
+func TestTopicWatcherStop(t *testing.T) {
+	sm := NewSubscriberMgr()
+
+	// Create a new watcher
+	watcherId := "test-watcher"
+	watcher, err := sm.NewTopicsWatcher(watcherId)
+	if err != nil {
+		t.Fatalf("Failed to create watcher: %v", err)
+	}
+
+	// Stop the watcher
+	err = watcher.Stop()
+	if err != nil {
+		t.Fatalf("Failed to stop watcher: %v", err)
+	}
+
+	// Try to read from the event channel, it should be closed
+	select {
+	case _, ok := <-watcher.Event():
+		if ok {
+			t.Fatalf("Event channel is still open after stopping")
+		}
+	default:
+		t.Fatalf("Event channel should be closed, but it's not")
+	}
+
+	// Try to stop the watcher again, it should return an error
+	err = watcher.Stop()
+	if err == nil {
+		t.Fatalf("Stopping an already stopped watcher should return an error")
 	}
 }
 
