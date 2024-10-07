@@ -223,10 +223,12 @@ func (sm *SubscriberMgr) removeSubscriber(sub Subscriber, topic string) {
 	}
 }
 
+// 通过订阅者ID发布消息. 订阅者ID如果不为空, 那么订阅者ID必须存在。
 func (sm *SubscriberMgr) PublishFromSubID(from SubscriberID, topic string, data []byte) (int, error) {
 	if from == "" {
 		return sm.Publish(nil, topic, data)
 	}
+
 	sm.Lock()
 	subscribers, ok := sm.subscribers[topic]
 	if !ok {
@@ -235,7 +237,26 @@ func (sm *SubscriberMgr) PublishFromSubID(from SubscriberID, topic string, data 
 	}
 	sm.Unlock()
 
-	return sm.Publish(subscribers.GetSubscriber(from), topic, data)
+	//return sm.Publish(subscribers.GetSubscriber(from), topic, data)//这样写，from 可以不存在。
+
+	// 通过订阅者ID获取订阅者
+	sub := subscribers.GetSubscriber(from)
+	if sub == nil {
+		return 0, fmt.Errorf("no subscriber:%s", from)
+	}
+
+	if sm.publishCheck != nil {
+		if err := sm.publishCheck(sub, topic, data); err != nil {
+			return 0, err
+		}
+	}
+
+	n := 0
+	subscribers.TraversalDo(sub, func(s Subscriber) {
+		n++
+		s.MailBoxMsg(topic, data)
+	})
+	return n, nil
 }
 
 // from可以为nil,即所有的订阅者都会收到，from 不为空，除from自己收不到，其他订阅者都能收到
