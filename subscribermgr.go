@@ -126,6 +126,12 @@ func (ss *Subscribers) DelSubscriber(s Subscriber) {
 func (ss *Subscribers) AddSubscriber(s Subscriber) {
 	ss.Lock()
 	defer ss.Unlock()
+	// 如果已经存在，则不重复添加. 重复添加会导致subSlice 和 subMap 不一致，check 的时候会panic
+	// 正常情况下是不会有重复的，sub.Subscribe(topic)在订阅的时候会检查topic是否已经订阅了。
+	// 但是并发性能测试BenchmarkConcurrentSubscribe中,如果有两个Parallel goroutine 生成相同的subID, topic, 就会导致重复添加.
+	if _, ok := ss.subMap[s.Id()]; ok {
+		return
+	}
 	ss.subMap[s.Id()] = s
 	ss.subSlice = append(ss.subSlice, s) //翻倍分配内存
 

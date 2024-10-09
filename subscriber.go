@@ -56,6 +56,7 @@ func (s *Subscribe) Topics() []string {
 func (s *Subscribe) Subscribe(topic string) error {
 	s.Lock()
 	if s.isClosed() {
+		s.Unlock()
 		return fmt.Errorf("subscriber:%v already closed", s.id)
 	}
 

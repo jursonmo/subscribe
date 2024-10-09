@@ -3,6 +3,7 @@ package subscribe
 import (
 	"fmt"
 	"reflect"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -491,3 +492,119 @@ BenchmarkSubscribe-8   	 4825744	       223.4 ns/op	     416 B/op	       4 alloc
 PASS
 ok  	github.com/jursonmo/subscribe	1.976s
 */
+
+func BenchmarkConcurrentSubscribe(b *testing.B) {
+	sm := NewSubscriberMgr()
+	b.ResetTimer()
+	b.RunParallel(func(pb *testing.PB) {
+		subID := SubscriberID(fmt.Sprintf("subID-%d", time.Now().UnixNano()))
+		sub := sm.NewSubscriber(subID, func(topic string, d []byte) error { return nil })
+		topic := fmt.Sprintf("topic-%d", time.Now().UnixNano())
+		//如果有两个Parallel goroutine 生成相同的subID, topic(这种情况有一定概率发生), 会panic(已经修复)
+		fmt.Println("subID:", subID, "topic:", topic)
+
+		for pb.Next() {
+			err := sub.Subscribe(topic)
+			if err != nil {
+				b.Fatal(err)
+			}
+			sub.UnSubscribe(topic)
+		}
+	})
+	b.StopTimer()
+
+	if sm.TopicNum() != 0 {
+		b.Fatalf("expect sm.TopicNum():0, but got %d", sm.TopicNum())
+	}
+}
+
+/*
+go test -bench=BenchmarkConcurrentSubscribe -cpu=2,4 -run=^$ -benchmem -benchtime=10s
+will@willdebijibendiannao subscribe % go test -bench=BenchmarkConcurrentSubscribe -cpu=1,2 -run=^$
+subID: subID-1728491247168083000 topic: topic-1728491247168128000
+subID: subID-1728491247168113000 topic: topic-1728491247168144000
+goos: darwin
+goarch: arm64
+pkg: github.com/jursonmo/subscribe
+BenchmarkConcurrentSubscribe
+subID: subID-1728491247168539000 topic: topic-1728491247168552000
+subID: subID-1728491247168963000 topic: topic-1728491247168979000
+subID: subID-1728491247176032000 topic: topic-1728491247176041000
+subID: subID-1728491247486902000 topic: topic-1728491247486910000
+ 3862513               292.9 ns/op
+BenchmarkConcurrentSubscribe-2
+subID: subID-1728491248618516000 topic: topic-1728491248618524000
+subID: subID-1728491248618518000 topic: topic-1728491248618526000
+subID: subID-1728491248618761000 topic: topic-1728491248618766000
+subID: subID-1728491248618768000 topic: topic-1728491248618769000
+subID: subID-1728491248618995000 topic: topic-1728491248618999000
+subID: subID-1728491248618998000 topic: topic-1728491248619003000
+subID: subID-1728491248623195000 topic: topic-1728491248623200000
+subID: subID-1728491248623199000 topic: topic-1728491248623219000
+subID: subID-1728491249027250000 topic: topic-1728491249027260000
+subID: subID-1728491249027255000 topic: topic-1728491249027273000
+ 2971753               365.6 ns/op
+PASS
+ok      github.com/jursonmo/subscribe   4.020s
+*/
+
+// 为了避免有两个Parallel goroutine 生成相同的subID, topic，用一个递增id来生成subID, topic
+func BenchmarkConcurrentSubscribev2(b *testing.B) {
+	sm := NewSubscriberMgr()
+	id := int64(0)
+	b.ResetTimer()
+	b.RunParallel(func(pb *testing.PB) {
+		idx := atomic.AddInt64(&id, 1)
+		subID := SubscriberID(fmt.Sprintf("subID-%d", idx))
+		sub := sm.NewSubscriber(subID, func(topic string, d []byte) error { return nil })
+		topic := fmt.Sprintf("topic-%d", idx)
+
+		n := 0
+		for pb.Next() {
+			err := sub.Subscribe(topic)
+			if err != nil {
+				b.Fatal(err)
+			}
+			sub.UnSubscribe(topic)
+			n++
+		}
+		fmt.Println("subID:", subID, "topic:", topic, "n:", n)
+	})
+	b.StopTimer()
+
+	if sm.TopicNum() != 0 {
+		b.Fatalf("expect sm.TopicNum():0, but got %d", sm.TopicNum())
+	}
+}
+
+/*
+will@willdebijibendiannao subscribe % go test -bench=BenchmarkConcurrentSubscribev2 -cpu=1,2 -run=^$
+goos: darwin
+goarch: arm64
+pkg: github.com/jursonmo/subscribe
+BenchmarkConcurrentSubscribev2
+subID: subID-2 topic: topic-2 n: 0
+subID: subID-1 topic: topic-1 n: 1
+subID: subID-1 topic: topic-1 n: 100
+subID: subID-1 topic: topic-1 n: 10000
+subID: subID-1 topic: topic-1 n: 1000000
+subID: subID-1 topic: topic-1 n: 3826284 //这里可以看到-cpu=1时, 只有一个goroutine执行测试，topic-2是没有得到测试的。
+ 3826284               299.2 ns/op
+BenchmarkConcurrentSubscribev2-2
+subID: subID-1 topic: topic-1 n: 1
+subID: subID-2 topic: topic-2 n: 0
+subID: subID-2 topic: topic-2 n: 16
+subID: subID-1 topic: topic-1 n: 84
+subID: subID-1 topic: topic-1 n: 4950
+subID: subID-2 topic: topic-2 n: 5050
+subID: subID-2 topic: topic-2 n: 500536
+subID: subID-1 topic: topic-1 n: 499464
+subID: subID-1 topic: topic-1 n: 1601321
+subID: subID-2 topic: topic-2 n: 1593340
+ 3194661               379.4 ns/op
+PASS
+ok      github.com/jursonmo/subscribe   4.321s
+will@willdebijibendiannao subscribe %
+*/
+// b.RunParallel 的 goroutine 是并发执行的，执行的goroutine数量是-cpu指定的数量, 如果-cpu=1 那么只会有一个goroutine执行。
+// 执行BenchmarkConcurrentSubscribev2的次数是动态的. for pb.Next() 的次数是动态递增的.
