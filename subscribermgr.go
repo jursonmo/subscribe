@@ -230,6 +230,25 @@ func (sm *SubscriberMgr) removeSubscriber(sub Subscriber, topic string) {
 }
 
 // 通过订阅者ID发布消息. 订阅者ID如果不为空, 那么订阅者ID必须存在。
+// PublishFromSubID 通过订阅者ID发布消息到指定主题
+//
+// 这个函数的作用是:
+// 1. 允许通过订阅者ID来发布消息到指定主题
+// 2. 如果订阅者ID为空，则调用普通的Publish方法
+// 3. 检查主题是否存在，如果不存在则返回错误
+// 4. 验证指定的订阅者ID是否存在，如果不存在则返回错误
+// 5. 如果设置了publishCheck，则进行发布前的检查
+// 6. 向除了发送者之外的所有订阅者发送消息
+// 7. 返回成功发送消息的订阅者数量
+//
+// 参数:
+//   - from: 发送者的订阅者ID
+//   - topic: 要发布到的主题
+//   - data: 要发送的消息内容
+//
+// 返回值:
+//   - int: 成功发送消息的订阅者数量
+//   - error: 如果出现错误，返回相应的错误信息
 func (sm *SubscriberMgr) PublishFromSubID(from SubscriberID, topic string, data []byte) (int, error) {
 	if from == "" {
 		return sm.Publish(nil, topic, data)
